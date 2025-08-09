@@ -2,6 +2,7 @@ const express = require("express");
 const kleur = require("kleur");
 const swaggerUi = require("swagger-ui-express"); // for later
 const mysql = require("mysql");
+const sharp = require("sharp");
 const app = express();
 app.use(express.json());
 
@@ -16,9 +17,23 @@ sql.connect(function(err) {
     console.log("Connected!");
 })
 
+const base64types = {
+    "jpeg": "data:image/jpeg;base64,",
+    "png": "data:image/png;base64,",
+    "webp": "data:image/webp;base64,",
+    "gif": "data:image/gif;base64,",
+    "jp2": "data:image/jp2;base64,",
+    "tiff": "data:image/tiff;base64,",
+    "avif": "data:image/avif;base64,",
+    "heif": "data:image/heif;base64,",
+    "jxl": "data:image/jxl;base64,",
+    "raw": "data:image/x-raw;base64,", // may work?
+}
+
 app.post("/images/convert", async (req, res) => {
     try {
-        const grayscale = await sharp(req.body.buffer).grayscale().toBuffer();
+        const buffer = Buffer.from(req.body.buffer.split(";base64,").pop(), "base64");
+        const grayscale = await sharp(buffer).grayscale().to();
         res.send({
             success: true,
             buffer: grayscale
@@ -26,7 +41,7 @@ app.post("/images/convert", async (req, res) => {
     } catch (e) {
         res.send({
             success: false,
-            error: e
+            error: e.toString() || "Generic"
         });
         console.log("Failed to convert: " + e);
     }
