@@ -1,6 +1,7 @@
 const express = require("express");
 const kleur = require("kleur");
 const swaggerUi = require("swagger-ui-express"); // for later
+const swaggerJs = require("swagger-jsdoc");
 const mysql = require("mysql");
 const sharp = require("sharp");
 const app = express();
@@ -11,6 +12,18 @@ var sql = mysql.createConnection({
     user: "",
     password: "",
 });
+
+const swaggerOptions = {
+    definition: {
+        openapi: "3.0.0",
+        info: {
+            title: "BitRender",
+            version: "1.0.0" // to replace with manifest version
+        },
+    },
+    apis: ["./index.js"]
+};
+const openApiSpecification = swaggerJs(swaggerOptions);
 
 sql.connect(function(err) {
     if (err) return console.log(kleur.red("[BitRender] Database error occurred - " + err));
@@ -30,13 +43,46 @@ const base64types = {
     "raw": "data:image/x-raw;base64,", // may work?
 }
 
-app.post("/images/convert", async (req, res) => {
+/**
+ * @openapi
+ * /images/convert/base64:
+ *   post:
+ *     description: Converts a base64 image string into another.
+ *     responses:
+ *       200:
+ *         description: Returns the converted image in Base64 format.
+ *     parameters:
+ *       - name: format
+ *         required: true
+ *         type: string
+ *         in: formData
+ *         description: The format you want to convert the image to.
+ *       - name: base64
+ *         required: true
+ *         type: string
+ *         in: formData
+ *         description: Valid base64 data that you want converted.
+ */
+app.post("/images/convert/base64", async (req, res) => {
     try {
-        const buffer = Buffer.from(req.body.buffer.split(";base64,").pop(), "base64");
-        const grayscale = await sharp(buffer).grayscale().to();
+        console.log(req.body);
+        if (!req?.body?.format) throw Error("No format was provided! Please use the `format` tag.");
+        const bufferSplit = req.body.base64.split(";base64,");
+        //const previousFormat = bufferSplit.shift(); // e.g. data:image/png
+        const previousBase64 = bufferSplit.pop(); // the string of letters after the content type
+        var newFormat = null;
+        const buffer = Buffer.from(previousBase64, "base64");
+        const format = req?.body?.format || "jpeg";
+        const grayscale = await sharp(buffer).toFormat(format).grayscale().toBuffer();
+        for (const [key, value] of Object.entries(base64types)) {
+            if (value.includes(format)) {
+                newFormat = value;
+            }
+        }
         res.send({
             success: true,
-            buffer: grayscale
+            format: format,
+            base64: (newFormat || "data:image/" + format + ";base64,") + grayscale.toString("base64")
         });
     } catch (e) {
         res.send({
@@ -45,8 +91,9 @@ app.post("/images/convert", async (req, res) => {
         });
         console.log("Failed to convert: " + e);
     }
-    
-})
+});
+
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpecification, {explorer: true}));
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
     log(`
@@ -56,7 +103,7 @@ app.listen(port, () => {
 ██▄▪▐█▐█▌ ▐█▌·▐█•█▌▐█▄▄▌██▐█▌██. ██ ▐█▄▄▌▐█•█▌
 ·▀▀▀▀ ▀▀▀ ▀▀▀ .▀  ▀ ▀▀▀ ▀▀ █▪▀▀▀▀▀•  ▀▀▀ .▀  ▀
         `);
-    console.log(" - Listening on " + kleur.underline("127.0.0.1:" + port) + " | Press Ctrl+C / Cmd+C to exit (^C)");
+    console.log("✱  Listening on " + kleur.underline("127.0.0.1:" + port) + " | Press Ctrl+C / Cmd+C to exit (^C)");
 });
 
 function log(text) {
