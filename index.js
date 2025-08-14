@@ -1,4 +1,6 @@
 const express = require("express");
+const multer = require("multer");
+const path = require("path");
 const kleur = require("kleur");
 const swaggerUi = require("swagger-ui-express"); // for later
 const swaggerJs = require("swagger-jsdoc");
@@ -24,6 +26,7 @@ const swaggerOptions = {
     apis: ["./index.js"]
 };
 const openApiSpecification = swaggerJs(swaggerOptions);
+const uplMulter = multer({storage: multer.memoryStorage()});
 
 sql.connect(function(err) {
     if (err) return console.log(kleur.red("[BitRender] Database error occurred - " + err));
@@ -93,6 +96,21 @@ app.post("/images/convert/base64", async (req, res) => {
     }
 });
 
+app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) => {
+    try {
+        if (!req.file) throw Error("No file was uploaded! Please check that you have uploaded a file correctly.");
+        if (!req.body.format) throw Error("No target format was specified! Please choose a compatible format.");
+        const format = req.body.format.toLowerCase();
+        if (!base64types[format]) throw Error("The chosen file format is not compatible / does not exist!");
+        const buffer = await sharp(req.file.buffer).toFormat(format).toBuffer();
+        const basePrefix = base64types[format] || "data:image/" + format + ";base64,";
+        res.send({success: true, format, base64: basePrefix + buffer.toString("base64")});
+    } catch (e) {
+        res.send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /images/convert/upload - " + e));
+    }
+})
+
 app.get("/images/formats", async (req, res) => {
     try {
         res.send({success: true, formats: base64types});
@@ -103,7 +121,7 @@ app.get("/images/formats", async (req, res) => {
         });
         console.log("Failed to convert: " + e);
     }
-})
+});
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpecification, {explorer: true}));
 const port = process.env.PORT || 3000;
