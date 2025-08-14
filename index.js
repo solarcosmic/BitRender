@@ -93,6 +93,18 @@ app.post("/images/convert/base64", async (req, res) => {
     }
 });
 
+app.get("/images/formats", async (req, res) => {
+    try {
+        res.send({success: true, formats: base64types});
+    } catch (e) {
+        res.send({
+            success: false,
+            error: e.toString() || "Generic"
+        });
+        console.log("Failed to convert: " + e);
+    }
+})
+
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpecification, {explorer: true}));
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
