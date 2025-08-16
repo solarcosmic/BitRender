@@ -204,7 +204,7 @@ function getBase64FromID(id, callback) {
         if (err) throw Error("Database error. Please contact an admin for more help.");
         const img = resp[0];
         const base64 = img.data.toString().replace(/^data:.+;base64,/, "");
-        callback(null, {buffer: Buffer.from(base64, "base64"), format: img.format});
+        callback(null, {base64: base64, pureBase64: resp[0].data.toString(), format: img.format});
     });
 }
 
@@ -214,12 +214,25 @@ app.get("/images/:id/raw", async (req, res) => {
         getBase64FromID(req.params.id, (err, result) => {
             if (err) return res.status(400).send({success: false, error: err.toString()});
             res.setHeader("Content-Type", "image/" + result.format);
-            res.send(result.buffer);
+            res.send(Buffer.from(result.base64, "base64"));
         })
     } catch (e) {
         res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
         console.log(kleur.red("[BitRender] Error on /images/:id - " + e));
-    }
+    };
+});
+
+app.get("/images/:id", async (req, res) => {
+    if (!req.params.id) throw Error("No valid image ID!");
+    try {
+        getBase64FromID(req.params.id, (err, result) => {
+            if (err) return res.status(400).send({success: false, error: err.toString()});
+            res.send({success: true, id: req.params.id, format: result.format, base64: result.pureBase64.toString()});
+        })
+    } catch (e) {
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /images/:id - " + e));
+    };
 })
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpecification, {explorer: true}));
