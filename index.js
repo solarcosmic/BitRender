@@ -111,7 +111,7 @@ app.post("/images/convert/base64", async (req, res) => {
             base64: (newFormat || "data:image/" + format + ";base64,") + grayscale.toString("base64")
         });
     } catch (e) {
-        res.send({
+        res.status(400).send({
             success: false,
             error: e.toString() || "Generic"
         });
@@ -129,22 +129,24 @@ app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) =>
         const basePrefix = base64types[format] || "data:image/" + format + ";base64,";
         res.send({success: true, format, base64: basePrefix + buffer.toString("base64")});
     } catch (e) {
-        res.send({success: false, error: e.toString() || "No valid error was provided!"});
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
         console.log(kleur.red("[BitRender] Error on /images/convert/upload - " + e));
     }
 });
 
 // TODO: fix
-app.post("/images/upload", async (req, res) => {
+app.post("/images/upload", uplMulter.single("file"), async (req, res) => {
     try {
-        // todo: change the sql query to convert the buffer into base64 before storing
-        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [req.file.originalname, req.body.format, req.file.buffer], (err, result) => {
+        const format = req.file.format;
+        const basePrefix = base64types[format] || "data:image/" + format + ";base64,";
+        const base64 = basePrefix + req.file.buffer.toString("base64");
+        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [req.file.originalname, req.file.format, base64], (err, result) => {
             res.send({
                 success: true
             });
         });
     } catch (e) {
-        res.send({success: false, error: e.toString() || "No valid error was provided!"});
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
         console.log(kleur.red("[BitRender] Error on /images/upload - " + e));
     }
 });
@@ -153,26 +155,72 @@ app.post("/images/upload/base64", async (req, res) => {
     try {
         const timeStart = Date.now();
         sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [req.body.name, req.body.format, req.body.base64], (err, result) => {
-            res.send({success: true, time_taken: (Date.now() - timeStart) + "ms", result: result});
+            if (err) throw Error(err);
+            res.send({success: true, id: result?.insertId, time_taken: (Date.now() - timeStart) + "ms"});
             console.log("✱  Uploaded file to database named \"" + req.body.name + "\" with format " + req.body.format + " via Base64!");
         })
     } catch (e) {
-        res.send({success: false, error: e.toString() || "No valid error was provided!"});
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
         console.log(kleur.red("[BitRender] Error on /images/upload - " + e));
     }
+})
+
+
+// TODO: add JWT auth
+app.delete("/images/delete/:id", async (req, res) => {
+    const imgId = req.params.id;
+    sql.query("SELECT * FROM images WHERE id = ?", [imgId], (err, rows) => {
+        if (err) {
+            console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + err));
+            return res.status(500).send({success: false, error: "Database error. Please contact an admin for more help."});
+        }
+        if (rows.length == 0) return res.status(404).send({success: false, error: "Image not found!"});
+        sql.query("DELETE FROM images WHERE id = ?", [imgId], (err, rows) => {
+            if (err) {
+                console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + err));
+                return res.status(500).send({success: false, error: "Deleting image failed. Please contact an admin for more help."});
+            }
+            return res.send({success: true, response: "Image with " + imgId + " successfully deleted."});
+        })
+    })
 })
 
 app.get("/images/formats", async (req, res) => {
     try {
         res.send({success: true, formats: base64types});
     } catch (e) {
-        res.send({
+        res.status(400).send({
             success: false,
             error: e.toString() || "Generic"
         });
         console.log("Failed to convert: " + e);
     }
 });
+
+function getBase64FromID(id, callback) {
+    sql.query("SELECT * FROM images WHERE id = ?", [id], async (err, resp) => {
+        if (err) return callback(err);
+        if (!resp[0]) return callback(new Error("Image not found!"));
+        if (err) throw Error("Database error. Please contact an admin for more help.");
+        const img = resp[0];
+        const base64 = img.data.toString().replace(/^data:.+;base64,/, "");
+        callback(null, {buffer: Buffer.from(base64, "base64"), format: img.format});
+    });
+}
+
+app.get("/images/:id/raw", async (req, res) => {
+    if (!req.params.id) throw Error("No valid image ID!");
+    try {
+        getBase64FromID(req.params.id, (err, result) => {
+            if (err) return res.status(400).send({success: false, error: err.toString()});
+            res.setHeader("Content-Type", "image/" + result.format);
+            res.send(result.buffer);
+        })
+    } catch (e) {
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /images/:id - " + e));
+    }
+})
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpecification, {explorer: true}));
 const port = process.env.PORT || 3000;
