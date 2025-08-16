@@ -9,26 +9,33 @@ const sharp = require("sharp");
 const yaml = require("js-yaml");
 const fs = require("fs");
 const app = express();
-app.use(express.json());
+app.use(express.json({limit: "3mb"}));
 
 var db = "bitrender";
 var host = "127.0.0.1";
 var user = "root";
 
-log(`
-                  Welcome to
-▄▄▄▄· ▪  ▄▄▄▄▄▄▄▄  ▄▄▄ . ▐ ▄ ·▄▄▄▄  ▄▄▄ .▄▄▄  
-▐█ ▀█▪██ •██  ▀▄ █·▀▄.▀·•█▌▐███▪ ██ ▀▄.▀·▀▄ █·
-▐█▀▀█▄▐█· ▐█.▪▐▀▀▄ ▐▀▀▪▄▐█▐▐▌▐█· ▐█▌▐▀▀▪▄▐▀▀▄ 
-██▄▪▐█▐█▌ ▐█▌·▐█•█▌▐█▄▄▌██▐█▌██. ██ ▐█▄▄▌▐█•█▌
-·▀▀▀▀ ▀▀▀ ▀▀▀ .▀  ▀ ▀▀▀ ▀▀ █▪▀▀▀▀▀•  ▀▀▀ .▀  ▀
-`);
+var settings = {}
 const start = Date.now();
+try {
+    const settings_yml = yaml.load(fs.readFileSync(path.join(__dirname, "settings.yml")));
+    settings = settings_yml;
+    kleur.enabled = settings?.misc?.log_coloring || false
+} catch (e) {
+    welcomePrint();
+    console.log(kleur.red("Failed to process settings.yml - " + e.toString()));
+    return process.exit();
+}
+welcomePrint();
+
 var sql = mysql.createConnection({
-    host: host,
-    user: user,
-    database: db,
-    password: "",
+    host: settings?.database?.host || "127.0.0.1",
+    user: settings?.database?.user || "root",
+    database: settings?.database?.db_name || "bitrender",
+    password: settings?.database?.password || "",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
 const swaggerOptions = {
@@ -36,13 +43,29 @@ const swaggerOptions = {
         openapi: "3.0.0",
         info: {
             title: "BitRender",
-            version: "1.0.0" // to replace with manifest version
+            version: "1.0.0", // to replace with manifest version
+            description: "An API that lets you convert, store, delete, and retrieve images!",
+            license: {
+                name: "MIT License",
+                url: "https://opensource.org/licenses/MIT"
+            }
         },
     },
     apis: ["./index.js"]
 };
 const openApiSpecification = swaggerJs(swaggerOptions);
 const uplMulter = multer({storage: multer.memoryStorage()});
+
+function welcomePrint() {
+    log(settings?.misc?.ascii ? `
+                  Welcome to
+▄▄▄▄· ▪  ▄▄▄▄▄▄▄▄  ▄▄▄ . ▐ ▄ ·▄▄▄▄  ▄▄▄ .▄▄▄  
+▐█ ▀█▪██ •██  ▀▄ █·▀▄.▀·•█▌▐███▪ ██ ▀▄.▀·▀▄ █·
+▐█▀▀█▄▐█· ▐█.▪▐▀▀▄ ▐▀▀▪▄▐█▐▐▌▐█· ▐█▌▐▀▀▪▄▐▀▀▄ 
+██▄▪▐█▐█▌ ▐█▌·▐█•█▌▐█▄▄▌██▐█▌██. ██ ▐█▄▄▌▐█•█▌
+·▀▀▀▀ ▀▀▀ ▀▀▀ .▀  ▀ ▀▀▀ ▀▀ █▪▀▀▀▀▀•  ▀▀▀ .▀  ▀
+` : `Welcome to BitRender.`);
+}
 
 sql.connect(function(err) {
     if (err) {
@@ -69,37 +92,51 @@ const base64types = {
     "raw": "data:image/x-raw;base64,", // may work?
 }
 
+function isBase64(str) {
+    return /^data:image\/[a-z]+;base64,[A-Za-z0-9+/]+={0,2}$/.test(str);
+}
+
 /**
  * @openapi
  * /images/convert/base64:
  *   post:
- *     description: Converts a base64 image string into another.
+ *     description: |
+ *       Converts a Base64 image string into a different format (jpg, png, webp, ...).
+ * 
+ *       **NOTE:** On Swagger UI, the Base64 response may be trimmed. Please consider using the API directly or a frontend implementation.
  *     responses:
  *       200:
  *         description: Returns the converted image in Base64 format.
- *     parameters:
- *       - name: format
- *         required: true
- *         type: string
- *         in: formData
- *         description: The format you want to convert the image to.
- *       - name: base64
- *         required: true
- *         type: string
- *         in: formData
- *         description: Valid base64 data that you want converted.
+ *       400:
+ *         description: Requirement not met or client/server side error (e.g. incorrect format, uncomplete Base64 string)
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - format
+ *               - base64
+ *             properties:
+ *               format:
+ *                 type: string
+ *                 description: The format you want to convert the image to (jpg, png, ...)
+ *               base64:
+ *                 type: string
+ *                 description: The Base64 string you want to convert. Usually begins with "data:image/"
  */
 app.post("/images/convert/base64", async (req, res) => {
     try {
         console.log(req.body);
         if (!req?.body?.format) throw Error("No format was provided! Please use the `format` tag.");
+        if (!isBase64(req.body.format)) throw Error("Format is not valid base64!");
         const bufferSplit = req.body.base64.split(";base64,");
         //const previousFormat = bufferSplit.shift(); // e.g. data:image/png
         const previousBase64 = bufferSplit.pop(); // the string of letters after the content type
         var newFormat = null;
         const buffer = Buffer.from(previousBase64, "base64");
         const format = req?.body?.format || "jpeg";
-        const grayscale = await sharp(buffer).toFormat(format).grayscale().toBuffer();
+        const grayscale = await sharp(buffer).toFormat(format).toBuffer();
         for (const [key, value] of Object.entries(base64types)) {
             if (value.includes(format)) {
                 newFormat = value;
@@ -119,11 +156,42 @@ app.post("/images/convert/base64", async (req, res) => {
     }
 });
 
+/**
+ * @openapi
+ * /images/convert/upload:
+ *   post:
+ *     description: |
+ *       Allows you to upload an image file and convert it into a different format (jpg, png, webp, ...). Returns Base64 version.
+ * 
+ *       **NOTE:** On Swagger UI, the Base64 response may be trimmed. Please consider using the API directly or a frontend implementation.
+ *     responses:
+ *       200:
+ *         description: Returns the converted image in Base64 format.
+ *       400:
+ *         description: Requirement not met or client/server side error (e.g. incorrect format, path error).
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - format
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: The image file. Must be compatible with the format list.
+ *               format:
+ *                 type: string
+ *                 description: The format you want to convert the image to (jpg, png, ...)
+ */
 app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) => {
     try {
         if (!req.file) throw Error("No file was uploaded! Please check that you have uploaded a file correctly.");
         if (!req.body.format) throw Error("No target format was specified! Please choose a compatible format.");
-        const format = req.body.format.toLowerCase();
+        var format = req.body.format.toLowerCase();
+        if (format.toLowerCase() == "jpg") format = "jpeg";
         if (!base64types[format]) throw Error("The chosen file format is not compatible / does not exist!");
         const buffer = await sharp(req.file.buffer).toFormat(format).toBuffer();
         const basePrefix = base64types[format] || "data:image/" + format + ";base64,";
@@ -134,15 +202,40 @@ app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) =>
     }
 });
 
+/**
+ * @openapi
+ * /images/upload:
+ *   post:
+ *     description: |
+ *       Allows you to upload an image file onto the database.
+ *     responses:
+ *       200:
+ *         description: Returns the ID of the newly created image file.
+ *       400:
+ *         description: Requirement not met or client/server side error (e.g. incorrect format, path error).
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: The image file. Must be compatible with the format list.
+ */
 // TODO: fix
 app.post("/images/upload", uplMulter.single("file"), async (req, res) => {
     try {
-        const format = req.file.format;
+        const format = req.file.mimetype.split("/")[1];
         const basePrefix = base64types[format] || "data:image/" + format + ";base64,";
         const base64 = basePrefix + req.file.buffer.toString("base64");
-        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [req.file.originalname, req.file.format, base64], (err, result) => {
+        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [sanitize(req.file.originalname), req.file.format, base64], (err, result) => {
             res.send({
-                success: true
+                success: true,
+                id: result?.insertId
             });
         });
     } catch (e) {
@@ -151,13 +244,44 @@ app.post("/images/upload", uplMulter.single("file"), async (req, res) => {
     }
 });
 
+/**
+ * @openapi
+ * /images/upload/base64:
+ *   post:
+ *     description: |
+ *       Uploads the Base64 image string to the database.
+ *     responses:
+ *       200:
+ *         description: Returns the ID of the newly created image file and the time taken to upload.
+ *       400:
+ *         description: Requirement not met or client/server side error (e.g. incorrect format, uncomplete Base64 string)
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - format
+ *               - base64
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: The name of the image file.
+ *               format:
+ *                 type: string
+ *                 description: The format you want to convert the image to (jpg, png, ...).
+ *               base64:
+ *                 type: string
+ *                 description: The Base64 string you want to convert. Usually begins with "data:image/".
+ */
 app.post("/images/upload/base64", async (req, res) => {
     try {
         const timeStart = Date.now();
-        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [req.body.name, req.body.format, req.body.base64], (err, result) => {
+        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [sanitize(req.body.name), req.body.format, req.body.base64], (err, result) => {
             if (err) throw Error(err);
             res.send({success: true, id: result?.insertId, time_taken: (Date.now() - timeStart) + "ms"});
-            console.log("✱  Uploaded file to database named \"" + req.body.name + "\" with format " + req.body.format + " via Base64!");
+            console.log("✱  Uploaded file to database named \"" + sanitize(req.body.name) + "\" with format " + req.body.format + " via Base64!");
         })
     } catch (e) {
         res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
@@ -165,7 +289,24 @@ app.post("/images/upload/base64", async (req, res) => {
     }
 })
 
-
+/**
+ * @openapi
+ * /images/delete/{id}:
+ *   delete:
+ *     description: Deletes an image from the database.
+ *     responses:
+ *       200:
+ *         description: Returns the ID of the deleted image file and a response.
+ *       500:
+ *         description: Server side error (e.g. failed to delete).
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the image you want to fetch.
+ */
 // TODO: add JWT auth
 app.delete("/images/delete/:id", async (req, res) => {
     const imgId = req.params.id;
@@ -180,16 +321,27 @@ app.delete("/images/delete/:id", async (req, res) => {
                 console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + err));
                 return res.status(500).send({success: false, error: "Deleting image failed. Please contact an admin for more help."});
             }
-            return res.send({success: true, response: "Image with " + imgId + " successfully deleted."});
+            return res.send({success: true, id: imgId, response: "Image with " + imgId + " successfully deleted."});
         })
     })
 })
 
+/**
+ * @openapi
+ * /images/formats:
+ *   get:
+ *     description: Returns a list of formats officially supported by BitRender.
+ *     responses:
+ *       200:
+ *         description: Returns an array of formats with their respective Base64 headers.
+ *       500:
+ *         description: Server side error.
+ */
 app.get("/images/formats", async (req, res) => {
     try {
         res.send({success: true, formats: base64types});
     } catch (e) {
-        res.status(400).send({
+        res.status(500).send({
             success: false,
             error: e.toString() || "Generic"
         });
@@ -208,6 +360,30 @@ function getBase64FromID(id, callback) {
     });
 }
 
+/**
+ * @openapi
+ * /images/{id}/raw:
+ *   get:
+ *     description: Returns an image from the database (Content-Type - Image).
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the image you want to fetch.
+ *     responses:
+ *       200:
+ *         description: Returns an image from the database (Content-Type - Image). No other content.
+ *         content:
+ *           image/*:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         description: Requirement not met or client/server side error (e.g. ID not found).
+ *     
+ */
 app.get("/images/:id/raw", async (req, res) => {
     if (!req.params.id) throw Error("No valid image ID!");
     try {
@@ -222,6 +398,25 @@ app.get("/images/:id/raw", async (req, res) => {
     };
 });
 
+/**
+ * @openapi
+ * /images/{id}:
+ *   get:
+ *     description: Returns an image in Base64 from the database.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the image you want to fetch.
+ *     responses:
+ *       200:
+ *         description: Returns the image from the database in Base64 format.
+ *       400:
+ *         description: Requirement not met or client/server side error (e.g. ID not found).
+ *     
+ */
 app.get("/images/:id", async (req, res) => {
     if (!req.params.id) throw Error("No valid image ID!");
     try {

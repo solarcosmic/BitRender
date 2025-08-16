@@ -1,0 +1,12 @@
+# Database!
+# This assumes you have followed the guide on the README.md.
+# It must be a SQL-based database, also must have `images` table and should be set up properly.
+database:
+  host: "127.0.0.1"              # The host IP for the server, usually 127.0.0.1 if hosting locally (localhost).
+  db_name: "bitrender"           # The name of the database to connect to.
+  user: "root"                   # The username to login with for the database.
+  password: ""                   # The password to login with for the database (only if required).
+
+misc:
+  ascii: true                    # Enables the ASCII art text in the terminal.
+  log_coloring: true             # Enables different types of colours in the terminal.
