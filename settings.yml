@@ -1,3 +1,6 @@
+general:
+  port: 3000
+
 # Database!
 # This assumes you have followed the guide on the README.md.
 # It must be a SQL-based database, also must have `images` table and should be set up properly.
