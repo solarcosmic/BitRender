@@ -9,6 +9,8 @@ const sharp = require("sharp");
 const yaml = require("js-yaml");
 const fs = require("fs");
 const sanitize = require("sanitize-filename");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 const app = express();
 app.use(express.json({limit: "3mb"}));
 
@@ -26,6 +28,7 @@ try {
 welcomePrint();
 
 const port = settings?.general?.port || 3000;
+const jwt_secret = settings?.auth?.jwt_secret || "changethis";
 
 var sql = mysql.createConnection({
     host: settings?.database?.host || "127.0.0.1",
@@ -34,7 +37,7 @@ var sql = mysql.createConnection({
     password: settings?.database?.password || "",
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
 });
 
 const swaggerOptions = {
@@ -43,11 +46,20 @@ const swaggerOptions = {
         info: {
             title: "BitRender",
             version: "1.0.0", // to replace with manifest version
-            description: "An API that lets you convert, store, delete, and retrieve images!",
+            description: `An API that lets you convert, store, delete, and retrieve images!\n\nUse /auth/signup to create a Bearer token, and /auth/login to fetch it. Then, you can click "Authorize" to input your Bearer token and unlock the database-modifying features.`,
             license: {
                 name: "MIT License",
                 url: "https://opensource.org/licenses/MIT"
             }
+        },
+        components: {
+            securitySchemes: {
+                bearerAuth: {
+                    type: "http",
+                    scheme: "bearer",
+                    bearerFormat: "JWT",
+                },
+            },
         },
     },
     apis: ["./index.js"]
@@ -77,6 +89,20 @@ sql.connect(function(err) {
         console.log("Took approximately " + (Date.now() - start) + "ms to load.");
     });
 })
+
+function authToken(req, res, next) {
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
+    if (!token) return res.status(401).send({success: false, error: "No token provided! Please provide a valid JWT token."});
+    jwt.verify(token, jwt_secret, (err, user) => {
+        if (err) {
+            console.log(kleur.red("[BitRender] JWT auth error - " + err));
+            return res.status(403).send({success: false, error: "Invalid JWT token."});
+        }
+        req.user = user;
+        next();
+    })
+}
 
 const base64types = {
     "jpeg": "data:image/jpeg;base64,",
@@ -210,6 +236,8 @@ app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) =>
  *   post:
  *     description: |
  *       Allows you to upload an image file onto the database.
+ *     summary: Allows you to upload an image file onto the database.
+ *     security: [{bearerAuth: []}]
  *     responses:
  *       200:
  *         description: Returns the ID of the newly created image file.
@@ -229,12 +257,13 @@ app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) =>
  *                 description: The image file. Must be compatible with the format list.
  */
 // TODO: fix
-app.post("/images/upload", uplMulter.single("file"), async (req, res) => {
+app.post("/images/upload", authToken, uplMulter.single("file"), async (req, res) => {
     try {
         const format = req.file.mimetype.split("/")[1];
         const basePrefix = base64types[format] || "data:image/" + format + ";base64,";
         const base64 = basePrefix + req.file.buffer.toString("base64");
-        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [sanitize(req.file.originalname), req.file.mimetype.split("/")[1], base64], (err, result) => {
+        if (!req.user.username) throw Error("No username provided!");
+        sql.query("INSERT INTO images (filename, format, data, author) VALUES (?, ?, ?, ?)", [sanitize(req.file.originalname), req.file.mimetype.split("/")[1], base64, req.user.username], (err, result) => {
             res.send({
                 success: true,
                 id: result?.insertId
@@ -252,6 +281,7 @@ app.post("/images/upload", uplMulter.single("file"), async (req, res) => {
  *   post:
  *     description: |
  *       Uploads the Base64 image string to the database.
+ *     security: [{bearerAuth: []}]
  *     responses:
  *       200:
  *         description: Returns the ID of the newly created image file and the time taken to upload.
@@ -277,10 +307,11 @@ app.post("/images/upload", uplMulter.single("file"), async (req, res) => {
  *                 type: string
  *                 description: The Base64 string you want to convert. Usually begins with "data:image/".
  */
-app.post("/images/upload/base64", async (req, res) => {
+app.post("/images/upload/base64", authToken, async (req, res) => {
     try {
+        if (!req.user.username) throw Error("No username provided!");
         const timeStart = Date.now();
-        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [sanitize(req.body.name), req.body.format, req.body.base64], (err, result) => {
+        sql.query("INSERT INTO images (filename, format, data, author) VALUES (?, ?, ?, ?)", [sanitize(req.body.name), req.body.format, req.body.base64, req.user.username], (err, result) => {
             if (err) throw Error(err);
             res.send({success: true, id: result?.insertId, time_taken: (Date.now() - timeStart) + "ms"});
             console.log("✱  Uploaded file to database named \"" + sanitize(req.body.name) + "\" with format " + req.body.format + " via Base64!");
@@ -296,6 +327,7 @@ app.post("/images/upload/base64", async (req, res) => {
  * /images/delete/{id}:
  *   delete:
  *     description: Deletes an image from the database.
+ *     security: [{bearerAuth: []}]
  *     responses:
  *       200:
  *         description: Returns the ID of the deleted image file and a response.
@@ -310,22 +342,29 @@ app.post("/images/upload/base64", async (req, res) => {
  *         description: The ID of the image you want to fetch.
  */
 // TODO: add JWT auth
-app.delete("/images/delete/:id", async (req, res) => {
-    const imgId = req.params.id;
-    sql.query("SELECT * FROM images WHERE id = ?", [imgId], (err, rows) => {
-        if (err) {
-            console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + err));
-            return res.status(500).send({success: false, error: "Database error. Please contact an admin for more help."});
-        }
-        if (rows.length == 0) return res.status(404).send({success: false, error: "Image not found!"});
-        sql.query("DELETE FROM images WHERE id = ?", [imgId], (err, rows) => {
+app.delete("/images/delete/:id", authToken, async (req, res) => {
+    try {
+        const imgId = req.params.id;
+        if (!req.user.username) throw Error("No username provided!");
+        sql.query("SELECT * FROM images WHERE id = ?", [imgId], (err, rows) => {
             if (err) {
                 console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + err));
-                return res.status(500).send({success: false, error: "Deleting image failed. Please contact an admin for more help."});
+                return res.status(500).send({success: false, error: "Database error. Please contact an admin for more help."});
             }
-            return res.send({success: true, id: imgId, response: "Image with " + imgId + " successfully deleted."});
+            console.log(rows);
+            /*if (rows.length == 0) return res.status(404).send({success: false, error: "Image not found!"});
+            sql.query("DELETE FROM images WHERE id = ?", [imgId], (err, rows) => {
+                if (err) {
+                    console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + err));
+                    return res.status(500).send({success: false, error: "Deleting image failed. Please contact an admin for more help."});
+                }
+                return res.send({success: true, id: imgId, response: "Image with " + imgId + " successfully deleted."});
+            })*/
         })
-    })
+    } catch (e) {
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + e));
+    }
 })
 
 /**
@@ -437,6 +476,7 @@ app.get("/images/:id", async (req, res) => {
  * /images/{id}/rename:
  *   put:
  *     description: Renames an image in the database.
+ *     security: [{bearerAuth: []}]
  *     parameters:
  *       - name: id
  *         in: path
@@ -538,7 +578,102 @@ app.get("/images", async (req, res) => {
         });
     } catch (e) {
         res.status(500).send({success: false, error: e.toString() || "No valid error was provided!"});
-        console.log(kleur.red("[BitRender] Error on /images/:id/rename - " + e));
+        console.log(kleur.red("[BitRender] Error on /images - " + e));
+    }
+})
+
+/**
+ * @openapi
+ * /auth/signup:
+ *   post:
+ *     description: Creates an account that can be accessed via /auth/login.
+ *     summary: Creates an account that can be accessed via /auth/login.
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 description: The username you want to sign up with.
+ *               password:
+ *                 type: string
+ *                 description: The password you want to sign up with.
+ *     responses:
+ *       200:
+ *         description: Returns a response that basically says "Success!" or "Fail".
+ *       400:
+ *         description: Requirement not met or client/server side error (e.g. incorrect details).
+ *     
+ */
+app.post("/auth/signup", async (req, res) => {
+    try {
+        console.log("step 1");
+        const {username, password} = req.body;
+        if (!username || !password) throw Error("A username and password is required!");
+        console.log("step 2");
+        const hash = await bcrypt.hash(password, 10);
+        console.log("step 3");
+        sql.query("INSERT INTO users (username, password) VALUES (?, ?)", [username, hash], (err, resp) => {
+            if (err) {
+                if (err.code == "ER_DUP_ENTRY") return res.status(400).send({success: false, error: "Uh oh! This username already exists."});
+                return res.status(500).send({success: false, error: "Database error. Please contact an admin for more help."})
+            }
+            res.send({success: true, message: "Successfully registered!"});
+        });
+    } catch (e) {
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /auth/signup - " + e));
+    }
+})
+
+/**
+ * @openapi
+ * /auth/login:
+ *   post:
+ *     description: Logs into your account via username and password and provides an access token (JWT/Bearer).
+ *     summary: Logs into your account via username and password and provides an access token (JWT/Bearer).
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 description: The username you want to log in with.
+ *               password:
+ *                 type: string
+ *                 description: The password you want to log in with.
+ *     responses:
+ *       200:
+ *         description: Returns the bearer/JWT token.
+ *       400:
+ *         description: Requirement not met or client/server side error (e.g. incorrect details).
+ *     
+ */
+app.post("/auth/login", (req, res) => {
+    try {
+        const {username, password} = req.body;
+        if (!username || !password) throw Error("A username and password is required!");
+        sql.query("SELECT * FROM users WHERE username = ?", [username], async (err, results) => {
+            if (err) return res.status(500).send({success: false, error: "Database error. Please contact an admin for more help."});
+            if (results.length == 0) return res.status(401).send({success: false, error: "Invalid credentials!"});
+            const user = results[0];
+            console.log(user);
+            const match = await bcrypt.compare(password, user.password);
+            if (!match) return res.status(401).send({success: false, error: "Invalid credentials!"});
+            const tok = jwt.sign({id: user.id, username: user.username}, jwt_secret, {expiresIn: "1h"});
+            res.send({success: true, token: tok});
+        })
+    } catch (e) {
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /auth/login - " + e));
     }
 })
 
