@@ -7,13 +7,27 @@ const swaggerJs = require("swagger-jsdoc");
 const mysql = require("mysql");
 const sharp = require("sharp");
 const yaml = require("js-yaml");
+const fs = require("fs");
 const app = express();
 app.use(express.json());
 
+var db = "bitrender";
+var host = "127.0.0.1";
+var user = "root";
+
+log(`
+                  Welcome to
+▄▄▄▄· ▪  ▄▄▄▄▄▄▄▄  ▄▄▄ . ▐ ▄ ·▄▄▄▄  ▄▄▄ .▄▄▄  
+▐█ ▀█▪██ •██  ▀▄ █·▀▄.▀·•█▌▐███▪ ██ ▀▄.▀·▀▄ █·
+▐█▀▀█▄▐█· ▐█.▪▐▀▀▄ ▐▀▀▪▄▐█▐▐▌▐█· ▐█▌▐▀▀▪▄▐▀▀▄ 
+██▄▪▐█▐█▌ ▐█▌·▐█•█▌▐█▄▄▌██▐█▌██. ██ ▐█▄▄▌▐█•█▌
+·▀▀▀▀ ▀▀▀ ▀▀▀ .▀  ▀ ▀▀▀ ▀▀ █▪▀▀▀▀▀•  ▀▀▀ .▀  ▀
+`);
+const start = Date.now();
 var sql = mysql.createConnection({
-    host: "",
-    user: "",
-    database: "",
+    host: host,
+    user: user,
+    database: db,
     password: "",
 });
 
@@ -31,8 +45,15 @@ const openApiSpecification = swaggerJs(swaggerOptions);
 const uplMulter = multer({storage: multer.memoryStorage()});
 
 sql.connect(function(err) {
-    if (err) return console.log(kleur.red("[BitRender] Database error occurred - " + err));
-    console.log("Connected!");
+    if (err) {
+        console.log(kleur.red("Database error occurred - " + err));
+        return process.exit();
+    }
+    console.log(kleur.green("✱  Connected to database! - " + db + "@" + host + " as " + user));
+    app.listen(port, () => {
+        console.log("✱  Listening on " + kleur.underline("127.0.0.1:" + port) + " | Press Ctrl+C / Cmd+C to exit (^C)");
+        console.log("Took approximately " + (Date.now() - start) + "ms to load.");
+    });
 })
 
 const base64types = {
@@ -113,6 +134,34 @@ app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) =>
     }
 });
 
+// TODO: fix
+app.post("/images/upload", async (req, res) => {
+    try {
+        // todo: change the sql query to convert the buffer into base64 before storing
+        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [req.file.originalname, req.body.format, req.file.buffer], (err, result) => {
+            res.send({
+                success: true
+            });
+        });
+    } catch (e) {
+        res.send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /images/upload - " + e));
+    }
+});
+
+app.post("/images/upload/base64", async (req, res) => {
+    try {
+        const timeStart = Date.now();
+        sql.query("INSERT INTO images (filename, format, data) VALUES (?, ?, ?)", [req.body.name, req.body.format, req.body.base64], (err, result) => {
+            res.send({success: true, time_taken: (Date.now() - timeStart) + "ms", result: result});
+            console.log("✱  Uploaded file to database named \"" + req.body.name + "\" with format " + req.body.format + " via Base64!");
+        })
+    } catch (e) {
+        res.send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /images/upload - " + e));
+    }
+})
+
 app.get("/images/formats", async (req, res) => {
     try {
         res.send({success: true, formats: base64types});
@@ -127,16 +176,6 @@ app.get("/images/formats", async (req, res) => {
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpecification, {explorer: true}));
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-    log(`
-▄▄▄▄· ▪  ▄▄▄▄▄▄▄▄  ▄▄▄ . ▐ ▄ ·▄▄▄▄  ▄▄▄ .▄▄▄  
-▐█ ▀█▪██ •██  ▀▄ █·▀▄.▀·•█▌▐███▪ ██ ▀▄.▀·▀▄ █·
-▐█▀▀█▄▐█· ▐█.▪▐▀▀▄ ▐▀▀▪▄▐█▐▐▌▐█· ▐█▌▐▀▀▪▄▐▀▀▄ 
-██▄▪▐█▐█▌ ▐█▌·▐█•█▌▐█▄▄▌██▐█▌██. ██ ▐█▄▄▌▐█•█▌
-·▀▀▀▀ ▀▀▀ ▀▀▀ .▀  ▀ ▀▀▀ ▀▀ █▪▀▀▀▀▀•  ▀▀▀ .▀  ▀
-        `);
-    console.log("✱  Listening on " + kleur.underline("127.0.0.1:" + port) + " | Press Ctrl+C / Cmd+C to exit (^C)");
-});
 
 function log(text) {
     console.log(kleur.cyan(text));
