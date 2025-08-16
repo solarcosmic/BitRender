@@ -6,12 +6,14 @@ const swaggerUi = require("swagger-ui-express"); // for later
 const swaggerJs = require("swagger-jsdoc");
 const mysql = require("mysql");
 const sharp = require("sharp");
+const yaml = require("js-yaml");
 const app = express();
 app.use(express.json());
 
 var sql = mysql.createConnection({
     host: "",
     user: "",
+    database: "",
     password: "",
 });
 
@@ -109,7 +111,7 @@ app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) =>
         res.send({success: false, error: e.toString() || "No valid error was provided!"});
         console.log(kleur.red("[BitRender] Error on /images/convert/upload - " + e));
     }
-})
+});
 
 app.get("/images/formats", async (req, res) => {
     try {
