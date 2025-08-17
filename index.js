@@ -133,6 +133,7 @@ function isBase64(str) {
  *       You can call [**GET /images/formats**](#/default/get_images_formats) to return a list of formats that are officially supported, but it may also be possible to use the formats [Sharp](https://sharp.pixelplumbing.com/api-output/) supports.
  * 
  *       **NOTE:** On Swagger UI, the Base64 response may be trimmed. Please consider using the API directly or a frontend implementation.
+ *     summary: Converts a Base64 image string into a different format (jpg, png, webp, ...).
  *     responses:
  *       200:
  *         description: Returns the converted image in Base64 format.
@@ -238,7 +239,9 @@ app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) =>
  * /images/upload:
  *   post:
  *     description: |
- *       Allows you to upload an image file onto the database.
+ *       Allows you to upload an image file onto the database. **Requires Bearer/JWT token.**
+ * 
+ *       `*` Images (as a file) that are uploaded are also converted to Base64 in the process.
  *     summary: Allows you to upload an image file onto the database.
  *     security: [{bearerAuth: []}]
  *     responses:
@@ -283,7 +286,12 @@ app.post("/images/upload", authToken, uplMulter.single("file"), async (req, res)
  * /images/upload/base64:
  *   post:
  *     description: |
- *       Uploads the Base64 image string to the database.
+ *       Uploads a Base64 image string to the database. **Requires Bearer/JWT token.**
+ *       
+ *       - `name` is the name of the file to be uploaded.
+ *       - `format` is the format of the Base64 image/string.
+ *       - `base64` is the Base64 string of an image (image, but text!)
+ *     summary: Uploads the Base64 image string to the database.
  *     security: [{bearerAuth: []}]
  *     responses:
  *       200:
@@ -330,6 +338,7 @@ app.post("/images/upload/base64", authToken, async (req, res) => {
  * /images/delete/{id}:
  *   delete:
  *     description: Deletes an image from the database.
+ *     summary: Deletes an image from the database.
  *     security: [{bearerAuth: []}]
  *     responses:
  *       200:
@@ -373,7 +382,13 @@ app.delete("/images/delete/:id", authToken, async (req, res) => {
  * @openapi
  * /images/formats:
  *   get:
- *     description: Returns a list of formats officially supported by BitRender.
+ *     description: |
+ *       Returns a list of formats officially supported by BitRender.
+ *       
+ *       This includes, but may not be limited to, `jpeg/jpg`, `png`, `webp`, `gif`, `jp2`, `tiff`, `avif`, `heif`, `jxl`, and `raw`.
+ * 
+ *       Also returns the corresponding Base64 header for the formats (e.g. `data:image/jpeg;base64`).
+ *     summary: Returns a list of formats officially supported by BitRender.
  *     responses:
  *       200:
  *         description: Returns an array of formats with their respective Base64 headers.
@@ -407,7 +422,8 @@ function getBase64FromID(id, callback) {
  * @openapi
  * /images/{id}/raw:
  *   get:
- *     description: Returns an image from the database (Content-Type - Image).
+ *     description: Returns only the image from the database (Content-Type - Image).
+ *     summary: Returns only the image from the database (Content-Type - Image).
  *     parameters:
  *       - name: id
  *         in: path
@@ -445,7 +461,8 @@ app.get("/images/:id/raw", async (req, res) => {
  * @openapi
  * /images/{id}:
  *   get:
- *     description: Returns an image in Base64 from the database.
+ *     description: Returns an image in Base64 from the database, with extra metadata in JSON.
+ *     summary: Returns an image in Base64 from the database, with extra metadata in JSON.
  *     parameters:
  *       - name: id
  *         in: path
@@ -478,6 +495,7 @@ app.get("/images/:id", async (req, res) => {
  * /images/{id}/rename:
  *   put:
  *     description: Renames an image in the database.
+ *     summary: Renames an image in the database.
  *     security: [{bearerAuth: []}]
  *     parameters:
  *       - name: id
@@ -532,6 +550,7 @@ app.put("/images/:id/rename", async (req, res) => {
  * 
  *       URL queries are supported, for example:
  *       /images?limit=5&offset=7&base64=true
+ *     summary: Returns an array of all the images stored in the database.
  *     parameters:
  *       - name: limit
  *         in: query
