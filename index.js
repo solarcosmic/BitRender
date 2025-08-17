@@ -353,7 +353,6 @@ app.post("/images/upload/base64", authToken, async (req, res) => {
  *           type: integer
  *         description: The ID of the image you want to fetch.
  */
-// TODO: add JWT auth
 app.delete("/images/delete/:id", authToken, async (req, res) => {
     try {
         const imgId = req.params.id;
@@ -678,7 +677,7 @@ app.post("/auth/signup", async (req, res) => {
  *         description: Requirement not met or client/server side error (e.g. incorrect details).
  *     
  */
-app.post("/auth/login", (req, res) => {
+app.post("/auth/login", async (req, res) => {
     try {
         const {username, password} = req.body;
         if (!username || !password) throw Error("A username and password is required!");
@@ -695,6 +694,86 @@ app.post("/auth/login", (req, res) => {
     } catch (e) {
         res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
         console.log(kleur.red("[BitRender] Error on /auth/login - " + e));
+    }
+})
+
+/**
+ * @openapi
+ * /auth/delete:
+ *   delete:
+ *     description: |
+ *       Deletes the logged in account.
+ * 
+ *       Also deletes any images that the user has created.
+ * 
+ *       Returns:
+ *       
+ *       - `success`: True or false if the deletion was successful or not
+ *       - `deleted_user`: A user JWT object, identical to the response from [/auth/user](#/default/get_auth_user)
+ *       - `deleted_images`: An array that contains the IDs of the images that have been deleted
+ *       - `response`: A message for frontend (response)
+ *     summary: Deletes the logged in account and images associated with it.
+ *     security: [{bearerAuth: []}]
+ *     responses:
+ *       200:
+ *         description: Returns if the account deletion was successful or not.
+ *       500:
+ *         description: Server side error (e.g. failed to delete account, images).
+ */
+app.delete("/auth/delete", authToken, async (req, res) => {
+    try {
+        const user = req.user;
+        sql.query("SELECT id FROM images WHERE author = ?", [user.username], (err, rows) => {
+            if (err) {
+                console.log(kleur.red("[BitRender] Error fetching images /auth/delete - " + e));
+                return res.status(500).send({success: false, error: e.toString() || "No valid error was provided!"});
+            }
+            const ids = rows.map(img => img.id);
+            sql.query("DELETE FROM images WHERE author = ?", [user.username], (err_del) => {
+                if (err_del) {
+                    console.log(kleur.red("[BitRender] Error deleting images /auth/delete - " + e));
+                    return res.status(500).send({success: false, error: e.toString() || "No valid error was provided!"});
+                }
+                sql.query("DELETE FROM users WHERE username = ?", [user.username], (err_usr) => {
+                    if (err_usr) {
+                        console.log(kleur.red("[BitRender] Error deleting account /auth/delete - " + e));
+                        return res.status(500).send({success: false, error: e.toString() || "No valid error was provided!"});
+                    }
+                    res.send({success: true, deleted_user: user, deleted_images: ids, response: "Account successfully deleted as well as its images."});
+                })
+            })
+        })
+    } catch (e) {
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /auth/delete - " + e));
+    }
+})
+
+/**
+ * @openapi
+ * /auth/user:
+ *   get:
+ *     description: |
+ *       Returns some user information for the logged in user, specifically JWT token details.
+ *       
+ *       Returns:
+ *       - `id`: ID of the user
+ *       - `username`: The username of the user
+ *       - `iat`: The time the JWT token was issued (UNIX timestamp)
+ *       - `exp`: The time the JWT token expires (UNIX timestamp)
+ *     summary: Returns some user information for the logged in user, specifically JWT token details.
+ *     responses:
+ *       200:
+ *         description: Returns an array of formats with their respective Base64 headers.
+ *       500:
+ *         description: Server side error.
+ */
+app.get("/auth/user", authToken, async (req, res) => {
+    try {
+        res.send(req.user);
+    } catch (e) {
+        res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
+        console.log(kleur.red("[BitRender] Error on /auth/user - " + e));
     }
 })
 
