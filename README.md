@@ -1,7 +1,10 @@
+<img width="1920" height="534" alt="bitrender_logo_banner" src="https://github.com/user-attachments/assets/8e925291-c582-4bca-ada3-5757343ef8ff" />
+
 # BitRender
-[Live Demo / Swagger API Docs](https://bitrender.solarcosmic.net/docs/)
 
 An API that lets you convert, store, delete, and retrieve images!
+
+[Live Demo / Swagger API Docs](https://bitrender.solarcosmic.net/docs/)
 
 ## Setting up
 To set up BitRender, you need these:
@@ -17,7 +20,7 @@ You can download the latest source code release from GitHub or clone the reposit
 
 Once in the directory, you can run `npm i` to install the required dependencies and `node index.js` to run the server. However, you may get this:
 
-[insert image here]
+<img width="497" height="150" alt="Screenshot 2025-08-17 143523" src="https://github.com/user-attachments/assets/90d53fe5-d919-4e3a-9d73-9f1201c9bf7f" />
 
 This is because there is no SQL database for BitRender to use. Let's create one!
 ### Creating a SQL database
@@ -52,4 +55,4 @@ database:
 ```
 If all is successful, when you run `node index.js`, you should be able to use BitRender!
 
-[insert image here]
+<img width="537" height="202" alt="Screenshot 2025-08-17 142836" src="https://github.com/user-attachments/assets/d89538f4-d0c3-4e97-b909-97cd1db7d4e2" />
