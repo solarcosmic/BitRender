@@ -12,7 +12,8 @@ const sanitize = require("sanitize-filename");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const app = express();
-app.use(express.json({limit: "3mb"}));
+app.use(cors());
+app.use(express.json({limit: "10mb"}));
 
 var settings = {}
 const start = Date.now();
@@ -192,6 +193,7 @@ app.post("/images/convert/base64", async (req, res) => {
  *       Allows you to upload an image file and convert it into a different format (jpg, png, webp, ...). Returns the image in Base64.
  * 
  *       **NOTE:** On Swagger UI, the Base64 response may be trimmed. Please consider using the API directly or a frontend implementation.
+ *     summary: Allows you to upload an image file and convert it into a different format (jpg, png, webp, ...). Returns the image in Base64.
  *     responses:
  *       200:
  *         description: Returns the converted image in Base64 format.
@@ -351,15 +353,14 @@ app.delete("/images/delete/:id", authToken, async (req, res) => {
                 console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + err));
                 return res.status(500).send({success: false, error: "Database error. Please contact an admin for more help."});
             }
-            console.log(rows);
-            /*if (rows.length == 0) return res.status(404).send({success: false, error: "Image not found!"});
+            if (rows.length == 0) return res.status(404).send({success: false, error: "Image not found!"});
             sql.query("DELETE FROM images WHERE id = ?", [imgId], (err, rows) => {
                 if (err) {
                     console.log(kleur.red("[BitRender] Error on /images/delete/:id - " + err));
                     return res.status(500).send({success: false, error: "Deleting image failed. Please contact an admin for more help."});
                 }
                 return res.send({success: true, id: imgId, response: "Image with " + imgId + " successfully deleted."});
-            })*/
+            })
         })
     } catch (e) {
         res.status(400).send({success: false, error: e.toString() || "No valid error was provided!"});
