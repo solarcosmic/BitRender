@@ -135,6 +135,8 @@ function isBase64(str) {
  *   post:
  *     description: |
  *       Converts a Base64 image string into a different format (jpg, png, webp, ...).
+ *       
+ *       Base64 image strings begin with `data:image/`.
  * 
  *       You can call [**GET /images/formats**](#/default/get_images_formats) to return a list of formats that are officially supported, but it may also be possible to use the formats [Sharp](https://sharp.pixelplumbing.com/api-output/) supports.
  * 
@@ -200,6 +202,8 @@ app.post("/images/convert/base64", async (req, res) => {
  *     description: |
  *       Allows you to upload an image file and convert it into a different format (jpg, png, webp, ...). Returns the image in Base64.
  * 
+ *       The image file's format must be compatible with the format list ([/images/formats](#/default/get_images_formats)).
+ * 
  *       **NOTE:** On Swagger UI, the Base64 response may be trimmed. Please consider using the API directly or a frontend implementation.
  *     summary: Allows you to upload an image file and convert it into a different format (jpg, png, webp, ...). Returns the image in Base64.
  *     responses:
@@ -246,6 +250,8 @@ app.post("/images/convert/upload", uplMulter.single("file"), async (req, res) =>
  *   post:
  *     description: |
  *       Allows you to upload an image file onto the database. **Requires Bearer/JWT token.**
+ * 
+ *       The image file's format must be compatible with the format list ([/images/formats](#/default/get_images_formats)).
  * 
  *       `*` Images (as a file) that are uploaded are also converted to Base64 in the process.
  *     summary: Allows you to upload an image file onto the database.
@@ -343,7 +349,10 @@ app.post("/images/upload/base64", authToken, async (req, res) => {
  * @openapi
  * /images/delete/{id}:
  *   delete:
- *     description: Deletes an image from the database.
+ *     description: |
+ *       Deletes an image from the database. **Requires Bearer/JWT token.**
+ * 
+ *       The author must be the one who has uploaded the image to delete it.
  *     summary: Deletes an image from the database.
  *     security: [{bearerAuth: []}]
  *     responses:
@@ -357,7 +366,7 @@ app.post("/images/upload/base64", authToken, async (req, res) => {
  *         required: true
  *         schema:
  *           type: integer
- *         description: The ID of the image you want to fetch.
+ *         description: The ID of the image you want to delete.
  */
 app.delete("/images/delete/:id", authToken, async (req, res) => {
     try {
@@ -427,7 +436,10 @@ function getBase64FromID(id, callback) {
  * @openapi
  * /images/{id}/raw:
  *   get:
- *     description: Returns only the image from the database (Content-Type - Image).
+ *     description: |
+ *       Returns only the image from the database, served with Content-Type: Image.
+ * 
+ *       Useful for grabbing images directly or embedding into web pages.
  *     summary: Returns only the image from the database (Content-Type - Image).
  *     parameters:
  *       - name: id
@@ -466,7 +478,14 @@ app.get("/images/:id/raw", async (req, res) => {
  * @openapi
  * /images/{id}:
  *   get:
- *     description: Returns an image in Base64 from the database, with extra metadata in JSON.
+ *     description: |
+ *       Returns an image in Base64 from the database, with extra information.
+ * 
+ *       Returns:
+ *       - `success`: True or false depending on whether this API call succeeded or not.
+ *       - `id`: The ID of the image.
+ *       - `format`: The intended format for the Base64 image.
+ *       - `base64`: The Base64 image string that contains the image.
  *     summary: Returns an image in Base64 from the database, with extra metadata in JSON.
  *     parameters:
  *       - name: id
@@ -499,7 +518,10 @@ app.get("/images/:id", async (req, res) => {
  * @openapi
  * /images/{id}/rename:
  *   put:
- *     description: Renames an image in the database.
+ *     description: |
+ *       Renames an image in the database. **Requires Bearer/JWT token.**
+ * 
+ *       The author must be the one who has uploaded the image to rename it.
  *     summary: Renames an image in the database.
  *     security: [{bearerAuth: []}]
  *     parameters:
@@ -612,7 +634,12 @@ app.get("/images", async (req, res) => {
  * @openapi
  * /auth/signup:
  *   post:
- *     description: Creates an account that can be accessed via /auth/login.
+ *     description: |
+ *       Creates an account that can be accessed via [/auth/login](#/default/post_auth_login).
+ * 
+ *       A Bearer/JWT token for that account can only be retrieved via the [/auth/login](#/default/post_auth_login) endpoint.
+ * 
+ *       This returns `success` and `id`, where ID is the ID for the newly created account.
  *     summary: Creates an account that can be accessed via /auth/login.
  *     requestBody:
  *       content:
@@ -660,7 +687,10 @@ app.post("/auth/signup", async (req, res) => {
  * @openapi
  * /auth/login:
  *   post:
- *     description: Logs into your account via username and password and provides an access token (JWT/Bearer).
+ *     description: |
+ *       Logs into your account via username and password and provides an access token (JWT/Bearer).
+ * 
+ *       That access token can then be used for database-related endpoints, such as [/images/upload](#/default/post_images_upload).
  *     summary: Logs into your account via username and password and provides an access token (JWT/Bearer).
  *     requestBody:
  *       content:
