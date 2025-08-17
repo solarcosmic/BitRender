@@ -11,6 +11,7 @@ const fs = require("fs");
 const sanitize = require("sanitize-filename");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const cors = require("cors");
 const app = express();
 app.use(cors());
 app.use(express.json({limit: "10mb"}));
