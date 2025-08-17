@@ -56,3 +56,6 @@ database:
 If all is successful, when you run `node index.js`, you should be able to use BitRender!
 
 <img width="537" height="202" alt="Screenshot 2025-08-17 142836" src="https://github.com/user-attachments/assets/d89538f4-d0c3-4e97-b909-97cd1db7d4e2" />
+
+## AI Disclosure
+AI was used in the making of this project - but only with some aspects of JWT and other aspects such as helping to debug, fix issues, and prototyping.

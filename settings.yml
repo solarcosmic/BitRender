@@ -9,7 +9,7 @@
 #  To view the license, see <https://opensource.org/licenses/MIT>.
 
 general:
-  port: 3000
+  port: 3000                     # The port that BitRender runs on.
 
 # Database!
 # This assumes you have followed the guide on the README.md.
