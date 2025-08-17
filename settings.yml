@@ -1,3 +1,13 @@
+#                  settings.yml
+# ▄▄▄▄· ▪  ▄▄▄▄▄▄▄▄  ▄▄▄ . ▐ ▄ ·▄▄▄▄  ▄▄▄ .▄▄▄  
+# ▐█ ▀█▪██ •██  ▀▄ █·▀▄.▀·•█▌▐███▪ ██ ▀▄.▀·▀▄ █·
+# ▐█▀▀█▄▐█· ▐█.▪▐▀▀▄ ▐▀▀▪▄▐█▐▐▌▐█· ▐█▌▐▀▀▪▄▐▀▀▄ 
+# ██▄▪▐█▐█▌ ▐█▌·▐█•█▌▐█▄▄▌██▐█▌██. ██ ▐█▄▄▌▐█•█▌
+# ·▀▀▀▀ ▀▀▀ ▀▀▀ .▀  ▀ ▀▀▀ ▀▀ █▪▀▀▀▀▀•  ▀▀▀ .▀  ▀
+#  Copyright (c) 2025 solarcosmic.
+#  This project is licensed under the MIT license.
+#  To view the license, see <https://opensource.org/licenses/MIT>.
+
 general:
   port: 3000
 
@@ -9,6 +19,7 @@ database:
   db_name: "bitrender"           # The name of the database to connect to.
   user: "root"                   # The username to login with for the database.
   password: ""                   # The password to login with for the database (only if required).
+  port: 3306                     # The port used to connect to the database.
 
 misc:
   ascii: true                    # Enables the ASCII art text in the terminal.

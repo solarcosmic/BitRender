@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2025 solarcosmic.
+ * This project is licensed under the MIT license.
+ * To view the license, see <https://opensource.org/licenses/MIT>.
+*/
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
@@ -37,6 +42,7 @@ var sql = mysql.createConnection({
     user: settings?.database?.user || "root",
     database: settings?.database?.db_name || "bitrender",
     password: settings?.database?.password || "",
+    port: parseInt(settings?.database?.port) || 3006,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
